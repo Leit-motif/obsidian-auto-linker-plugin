@@ -1,0 +1,15 @@
+{
+  "name": "obsidian-auto-linker-plugin",
+  "version": "1.0.0",
+  "description": "an obsidian plugin that automatically creates links in all of your notes based on a list of strings.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Amrit Chana",
+  "license": "ISC",
+  "devDependencies": {
+    "obsidian": "^1.6.6",
+    "typescript": "^5.5.4"
+  }
+}

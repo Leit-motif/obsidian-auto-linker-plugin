@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    /* Language and Environment */
+    "target": "es2016",                                /* Target ECMAScript version */
+    "module": "commonjs",                              /* CommonJS module system for compatibility */
+    "strict": true,                                    /* Enable all strict type-checking options */
+    "esModuleInterop": true,                           /* Emit extra code for better CommonJS compatibility */
+    "forceConsistentCasingInFileNames": true,          /* Ensure consistent casing in file names */
+    "skipLibCheck": true,                              /* Skip type checking of declaration files */
+    "resolveJsonModule": true,                         /* Allow importing JSON files */
+    "outDir": "./dist",                                /* Output directory for compiled files */
+    "rootDir": "./",                                   /* Root directory for source files */
+    "allowSyntheticDefaultImports": true,              /* Allow default imports from modules without default exports */
+    
+    /* Modules */
+    "moduleResolution": "node",                        /* TypeScript will resolve modules like Node.js */
+    "baseUrl": "./",                                   /* Base directory for resolving non-relative module names */
+    "paths": {                                         /* Paths for module resolution */
+      "obsidian": ["node_modules/obsidian"]            /* Explicitly map the Obsidian module */
+    }
+  },
+  "include": ["src/**/*.ts"],                           /* Include all TypeScript files in the src directory */
+  "exclude": ["node_modules", "dist"]                  /* Exclude node_modules and dist directories */
+}
