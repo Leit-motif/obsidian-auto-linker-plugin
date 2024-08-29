@@ -1,0 +1,10 @@
+{
+    "id": "obsidian-auto-linker",
+    "name": "Auto Linker",
+    "version": "1.0.0",
+    "minAppVersion": "0.15.0",
+    "description": "Automatically creates links between notes based on specified criteria.",
+    "author": "Amrit Chana",
+    "authorUrl": "https://github.com/Leit-motif",
+    "isDesktopOnly": false
+}

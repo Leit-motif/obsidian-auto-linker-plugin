@@ -87,6 +87,7 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
         console.log('Words to link:', wordsToLink);
         const excludedBlocks = this.settings.excludedBlocks.split(',').map(block => block.trim());
         const blacklistedStrings = this.settings.blacklistedStrings.split(',').map(str => str.trim().toLowerCase());
+        const whitelistedStrings = this.settings.whitelistedStrings.split(',').map(str => str.trim().toLowerCase());
         let sections = content.split(/^(#.*$)/m);
         let totalReplacements = 0;
         let isExcludedBlock = false;
@@ -96,7 +97,8 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
             }
             else if (!isExcludedBlock) {
                 for (const word of wordsToLink) {
-                    if (!blacklistedStrings.includes(word.toLowerCase())) {
+                    if (!blacklistedStrings.includes(word.toLowerCase()) &&
+                        (whitelistedStrings.length === 0 || whitelistedStrings[0] === '' || whitelistedStrings.includes(word.toLowerCase()))) {
                         const pattern = new RegExp(`(?<!\\[\\[)\\b${this.escapeRegExp(word)}\\b(?!\\]\\])`, 'gi');
                         const originalSection = sections[i];
                         sections[i] = sections[i].replace(pattern, (match) => {
@@ -122,6 +124,12 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
             const vaultLinks = yield this.getVaultLinks();
             words = [...vaultLinks];
             console.log(`Found ${words.length} words from vault links`);
+            // Apply whitelist if specified
+            const whitelist = this.settings.whitelistedStrings.split(',').map(str => str.trim());
+            if (whitelist.length > 0 && whitelist[0] !== '') {
+                words = words.filter(word => whitelist.includes(word));
+                console.log(`After applying whitelist: ${words.length} words`);
+            }
             console.log(`Total words to link: ${words.length}`);
             return words;
         });
@@ -241,6 +249,7 @@ const DEFAULT_SETTINGS = {
     specifiedDirectory: '',
     excludedBlocks: '',
     blacklistedStrings: '',
+    whitelistedStrings: '',
     linksToRemove: ''
 };
 class AutoLinkerSettingTab extends obsidian_1.PluginSettingTab {
@@ -279,6 +288,16 @@ class AutoLinkerSettingTab extends obsidian_1.PluginSettingTab {
             .setValue(this.plugin.settings.blacklistedStrings)
             .onChange((value) => __awaiter(this, void 0, void 0, function* () {
             this.plugin.settings.blacklistedStrings = value;
+            yield this.plugin.saveSettings();
+        })));
+        new obsidian_1.Setting(containerEl)
+            .setName('Whitelisted Strings')
+            .setDesc('Enter strings to be exclusively linked, separated by commas. If empty, all non-blacklisted strings will be linked.')
+            .addText(text => text
+            .setPlaceholder('important, keyword, topic')
+            .setValue(this.plugin.settings.whitelistedStrings)
+            .onChange((value) => __awaiter(this, void 0, void 0, function* () {
+            this.plugin.settings.whitelistedStrings = value;
             yield this.plugin.saveSettings();
         })));
         this.manageLinksSetting = new obsidian_1.Setting(containerEl)

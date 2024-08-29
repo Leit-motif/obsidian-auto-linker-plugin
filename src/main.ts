@@ -5,6 +5,7 @@ interface AutoLinkerSettings {
     specifiedDirectory: string;
     excludedBlocks: string;
     blacklistedStrings: string;
+    whitelistedStrings: string;
     linksToRemove: string;
 }
 
@@ -80,6 +81,7 @@ export default class AutoLinkerPlugin extends Plugin {
         
         const excludedBlocks = this.settings.excludedBlocks.split(',').map(block => block.trim());
         const blacklistedStrings = this.settings.blacklistedStrings.split(',').map(str => str.trim().toLowerCase());
+        const whitelistedStrings = this.settings.whitelistedStrings.split(',').map(str => str.trim().toLowerCase());
         let sections = content.split(/^(#.*$)/m);
         let totalReplacements = 0;
         let isExcludedBlock = false;
@@ -89,7 +91,8 @@ export default class AutoLinkerPlugin extends Plugin {
                 isExcludedBlock = excludedBlocks.some(block => sections[i].toLowerCase().includes(block.toLowerCase()));
             } else if (!isExcludedBlock) {
                 for (const word of wordsToLink) {
-                    if (!blacklistedStrings.includes(word.toLowerCase())) {
+                    if (!blacklistedStrings.includes(word.toLowerCase()) &&
+                        (whitelistedStrings.length === 0 || whitelistedStrings[0] === '' || whitelistedStrings.includes(word.toLowerCase()))) {
                         const pattern = new RegExp(`(?<!\\[\\[)\\b${this.escapeRegExp(word)}\\b(?!\\]\\])`, 'gi');
                         const originalSection = sections[i];
                         sections[i] = sections[i].replace(pattern, (match) => {
@@ -117,6 +120,13 @@ export default class AutoLinkerPlugin extends Plugin {
         const vaultLinks = await this.getVaultLinks();
         words = [...vaultLinks];
         console.log(`Found ${words.length} words from vault links`);
+
+        // Apply whitelist if specified
+        const whitelist = this.settings.whitelistedStrings.split(',').map(str => str.trim());
+        if (whitelist.length > 0 && whitelist[0] !== '') {
+            words = words.filter(word => whitelist.includes(word));
+            console.log(`After applying whitelist: ${words.length} words`);
+        }
 
         console.log(`Total words to link: ${words.length}`);
         return words;
@@ -237,6 +247,7 @@ const DEFAULT_SETTINGS: AutoLinkerSettings = {
     specifiedDirectory: '',
     excludedBlocks: '',
     blacklistedStrings: '',
+    whitelistedStrings: '',
     linksToRemove: ''
 }
 
@@ -285,6 +296,17 @@ class AutoLinkerSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.blacklistedStrings)
                 .onChange(async (value) => {
                     this.plugin.settings.blacklistedStrings = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Whitelisted Strings')
+            .setDesc('Enter strings to be exclusively linked, separated by commas. If empty, all non-blacklisted strings will be linked.')
+            .addText(text => text
+                .setPlaceholder('important, keyword, topic')
+                .setValue(this.plugin.settings.whitelistedStrings)
+                .onChange(async (value) => {
+                    this.plugin.settings.whitelistedStrings = value;
                     await this.plugin.saveSettings();
                 }));
 
