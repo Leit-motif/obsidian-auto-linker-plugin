@@ -11,6 +11,7 @@ interface AutoLinkerSettings {
 
 export default class AutoLinkerPlugin extends Plugin {
     settings: AutoLinkerSettings = DEFAULT_SETTINGS; // Initialize with default settings
+    lastChanges: { file: TFile; oldContent: string }[] = [];
 
     async onload() {
         await this.loadSettings();
@@ -45,6 +46,7 @@ export default class AutoLinkerPlugin extends Plugin {
 
     // New method to handle current file linking
     async autoLinkCurrentFile() {
+        this.lastChanges = []; // Clear previous changes before new operation
         console.log('Attempting to auto-link current file');
         const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (activeView && activeView.file) {
@@ -68,6 +70,7 @@ export default class AutoLinkerPlugin extends Plugin {
         console.log('First 100 characters after linking:', linkedContent.substring(0, 100));
         if (content !== linkedContent) {
             console.log('Changes detected, modifying file');
+            this.lastChanges.push({ file, oldContent: content });
             await this.app.vault.modify(file, linkedContent);
         } else {
             console.log('No changes made to the file');
@@ -79,7 +82,7 @@ export default class AutoLinkerPlugin extends Plugin {
         console.log('Linking words in content');
         console.log('Words to link:', wordsToLink);
         
-        const excludedBlocks = this.settings.excludedBlocks.split(',').map(block => block.trim());
+        const excludedBlocks = this.settings.excludedBlocks.split(',').map(block => block.trim().toLowerCase());
         const blacklistedStrings = this.settings.blacklistedStrings.split(',').map(str => str.trim().toLowerCase());
         const whitelistedStrings = this.settings.whitelistedStrings.split(',').map(str => str.trim().toLowerCase());
         let sections = content.split(/^(#.*$)/m);
@@ -88,20 +91,20 @@ export default class AutoLinkerPlugin extends Plugin {
 
         for (let i = 0; i < sections.length; i++) {
             if (sections[i].startsWith('#')) {
-                isExcludedBlock = excludedBlocks.some(block => sections[i].toLowerCase().includes(block.toLowerCase()));
+                isExcludedBlock = excludedBlocks.some(block => sections[i].toLowerCase().includes(block));
             } else if (!isExcludedBlock) {
                 for (const word of wordsToLink) {
-                    if (!blacklistedStrings.includes(word.toLowerCase()) &&
-                        (whitelistedStrings.length === 0 || whitelistedStrings[0] === '' || whitelistedStrings.includes(word.toLowerCase()))) {
-                        const pattern = new RegExp(`(?<!\\[\\[)\\b${this.escapeRegExp(word)}\\b(?!\\]\\])`, 'gi');
-                        const originalSection = sections[i];
-                        sections[i] = sections[i].replace(pattern, (match) => {
-                            if (this.settings.existingFilesOnly && !this.fileExists(match)) {
+                    const lowercaseWord = word.toLowerCase();
+                    if (!blacklistedStrings.includes(lowercaseWord) &&
+                        (whitelistedStrings.length === 0 || whitelistedStrings[0] === '' || whitelistedStrings.includes(lowercaseWord))) {
+                        const pattern = new RegExp(`(?<!\\[\\[)\\b(${this.escapeRegExp(word)})\\b(?!\\]\\])`, 'gi');
+                        sections[i] = sections[i].replace(pattern, (match, p1) => {
+                            if (this.settings.existingFilesOnly && !this.fileExists(word)) {
                                 return match; // Don't link if file doesn't exist and setting is on
                             }
                             totalReplacements++;
                             console.log(`Linked word "${match}" in section`);
-                            return `[[${match}]]`;
+                            return `[[${match}]]`; // Use the original case from the document
                         });
                     }
                 }
@@ -118,13 +121,13 @@ export default class AutoLinkerPlugin extends Plugin {
 
         // Get words from vault links
         const vaultLinks = await this.getVaultLinks();
-        words = [...vaultLinks];
+        words = [...new Set(vaultLinks)]; // Remove duplicates
         console.log(`Found ${words.length} words from vault links`);
 
         // Apply whitelist if specified
         const whitelist = this.settings.whitelistedStrings.split(',').map(str => str.trim());
         if (whitelist.length > 0 && whitelist[0] !== '') {
-            words = words.filter(word => whitelist.includes(word));
+            words = words.filter(word => whitelist.some(w => w.toLowerCase() === word.toLowerCase()));
             console.log(`After applying whitelist: ${words.length} words`);
         }
 
@@ -136,10 +139,6 @@ export default class AutoLinkerPlugin extends Plugin {
         const links = new Set<string>();
         const rootFolder = this.app.vault.getRoot();
         await this.processFolder(rootFolder, links);
-        
-        if (this.settings.existingFilesOnly) {
-            return Array.from(links).filter(link => this.fileExists(link));
-        }
         
         return Array.from(links);
     }
@@ -154,13 +153,11 @@ export default class AutoLinkerPlugin extends Plugin {
     async processFolder(folder: TFolder, links: Set<string>): Promise<void> {
         for (const child of folder.children) {
             if (child instanceof TFile && child.extension === 'md') {
-                if (folder.path === '/') {  // Only process files in the root
-                    const fileLinks = await this.getFileLinks(child);
-                    fileLinks.forEach(link => links.add(link));
-                }
+                const fileLinks = await this.getFileLinks(child);
+                fileLinks.forEach(link => links.add(link));
             } else if (child instanceof TFolder) {
-                // Recursively process subfolders if needed
-                // await this.processFolder(child, links);
+                // Recursively process subfolders
+                await this.processFolder(child, links);
             }
         }
     }
@@ -239,6 +236,20 @@ export default class AutoLinkerPlugin extends Plugin {
             newContent = newContent.replace(pattern, link);
         }
         return newContent;
+    }
+
+    async undoLastChanges() {
+        if (this.lastChanges.length === 0) {
+            new Notice('No changes to undo');
+            return;
+        }
+
+        for (const change of this.lastChanges) {
+            await this.app.vault.modify(change.file, change.oldContent);
+        }
+
+        new Notice(`Undid changes in ${this.lastChanges.length} file(s)`);
+        this.lastChanges = []; // Clear the changes after undoing
     }
 }
 
@@ -360,6 +371,16 @@ class AutoLinkerSettingTab extends PluginSettingTab {
                         await this.plugin.removeLinksFromDirectory();
                         this.clearLinksToRemove();
                     }).open();
+                }));
+
+        new Setting(containerEl)
+            .setName('Undo Last Changes')
+            .setDesc('Undo the last set of changes made by the Auto Linker')
+            .addButton(button => button
+                .setButtonText('Undo Last Changes')
+                .onClick(async () => {
+                    await this.plugin.undoLastChanges();
+                    this.display(); // Refresh the settings view
                 }));
 
         this.updateManageLinksButtons();

@@ -1,9 +1,9 @@
 {
-    "id": "obsidian-auto-linker",
-    "name": "Auto Linker",
+    "id": "linkify",
+    "name": "Linkify",
     "version": "1.0.0",
     "minAppVersion": "0.15.0",
-    "description": "Automatically creates links between notes based on specified criteria.",
+    "description": "Automatically creates links between your notes.",
     "author": "Amrit Chana",
     "authorUrl": "https://github.com/Leit-motif",
     "isDesktopOnly": false

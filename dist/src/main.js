@@ -14,6 +14,7 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
     constructor() {
         super(...arguments);
         this.settings = DEFAULT_SETTINGS; // Initialize with default settings
+        this.lastChanges = [];
     }
     onload() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -49,6 +50,7 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
     // New method to handle current file linking
     autoLinkCurrentFile() {
         return __awaiter(this, void 0, void 0, function* () {
+            this.lastChanges = []; // Clear previous changes before new operation
             console.log('Attempting to auto-link current file');
             const activeView = this.app.workspace.getActiveViewOfType(obsidian_1.MarkdownView);
             if (activeView && activeView.file) {
@@ -74,6 +76,7 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
             console.log('First 100 characters after linking:', linkedContent.substring(0, 100));
             if (content !== linkedContent) {
                 console.log('Changes detected, modifying file');
+                this.lastChanges.push({ file, oldContent: content });
                 yield this.app.vault.modify(file, linkedContent);
             }
             else {
@@ -85,7 +88,7 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
     linkWords(content, wordsToLink) {
         console.log('Linking words in content');
         console.log('Words to link:', wordsToLink);
-        const excludedBlocks = this.settings.excludedBlocks.split(',').map(block => block.trim());
+        const excludedBlocks = this.settings.excludedBlocks.split(',').map(block => block.trim().toLowerCase());
         const blacklistedStrings = this.settings.blacklistedStrings.split(',').map(str => str.trim().toLowerCase());
         const whitelistedStrings = this.settings.whitelistedStrings.split(',').map(str => str.trim().toLowerCase());
         let sections = content.split(/^(#.*$)/m);
@@ -93,21 +96,21 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
         let isExcludedBlock = false;
         for (let i = 0; i < sections.length; i++) {
             if (sections[i].startsWith('#')) {
-                isExcludedBlock = excludedBlocks.some(block => sections[i].toLowerCase().includes(block.toLowerCase()));
+                isExcludedBlock = excludedBlocks.some(block => sections[i].toLowerCase().includes(block));
             }
             else if (!isExcludedBlock) {
                 for (const word of wordsToLink) {
-                    if (!blacklistedStrings.includes(word.toLowerCase()) &&
-                        (whitelistedStrings.length === 0 || whitelistedStrings[0] === '' || whitelistedStrings.includes(word.toLowerCase()))) {
-                        const pattern = new RegExp(`(?<!\\[\\[)\\b${this.escapeRegExp(word)}\\b(?!\\]\\])`, 'gi');
-                        const originalSection = sections[i];
-                        sections[i] = sections[i].replace(pattern, (match) => {
-                            if (this.settings.existingFilesOnly && !this.fileExists(match)) {
+                    const lowercaseWord = word.toLowerCase();
+                    if (!blacklistedStrings.includes(lowercaseWord) &&
+                        (whitelistedStrings.length === 0 || whitelistedStrings[0] === '' || whitelistedStrings.includes(lowercaseWord))) {
+                        const pattern = new RegExp(`(?<!\\[\\[)\\b(${this.escapeRegExp(word)})\\b(?!\\]\\])`, 'gi');
+                        sections[i] = sections[i].replace(pattern, (match, p1) => {
+                            if (this.settings.existingFilesOnly && !this.fileExists(word)) {
                                 return match; // Don't link if file doesn't exist and setting is on
                             }
                             totalReplacements++;
                             console.log(`Linked word "${match}" in section`);
-                            return `[[${match}]]`;
+                            return `[[${match}]]`; // Use the original case from the document
                         });
                     }
                 }
@@ -122,12 +125,12 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
             let words = [];
             // Get words from vault links
             const vaultLinks = yield this.getVaultLinks();
-            words = [...vaultLinks];
+            words = [...new Set(vaultLinks)]; // Remove duplicates
             console.log(`Found ${words.length} words from vault links`);
             // Apply whitelist if specified
             const whitelist = this.settings.whitelistedStrings.split(',').map(str => str.trim());
             if (whitelist.length > 0 && whitelist[0] !== '') {
-                words = words.filter(word => whitelist.includes(word));
+                words = words.filter(word => whitelist.some(w => w.toLowerCase() === word.toLowerCase()));
                 console.log(`After applying whitelist: ${words.length} words`);
             }
             console.log(`Total words to link: ${words.length}`);
@@ -139,9 +142,6 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
             const links = new Set();
             const rootFolder = this.app.vault.getRoot();
             yield this.processFolder(rootFolder, links);
-            if (this.settings.existingFilesOnly) {
-                return Array.from(links).filter(link => this.fileExists(link));
-            }
             return Array.from(links);
         });
     }
@@ -155,14 +155,12 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
         return __awaiter(this, void 0, void 0, function* () {
             for (const child of folder.children) {
                 if (child instanceof obsidian_1.TFile && child.extension === 'md') {
-                    if (folder.path === '/') { // Only process files in the root
-                        const fileLinks = yield this.getFileLinks(child);
-                        fileLinks.forEach(link => links.add(link));
-                    }
+                    const fileLinks = yield this.getFileLinks(child);
+                    fileLinks.forEach(link => links.add(link));
                 }
                 else if (child instanceof obsidian_1.TFolder) {
-                    // Recursively process subfolders if needed
-                    // await this.processFolder(child, links);
+                    // Recursively process subfolders
+                    yield this.processFolder(child, links);
                 }
             }
         });
@@ -241,6 +239,19 @@ class AutoLinkerPlugin extends obsidian_1.Plugin {
             newContent = newContent.replace(pattern, link);
         }
         return newContent;
+    }
+    undoLastChanges() {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.lastChanges.length === 0) {
+                new obsidian_1.Notice('No changes to undo');
+                return;
+            }
+            for (const change of this.lastChanges) {
+                yield this.app.vault.modify(change.file, change.oldContent);
+            }
+            new obsidian_1.Notice(`Undid changes in ${this.lastChanges.length} file(s)`);
+            this.lastChanges = []; // Clear the changes after undoing
+        });
     }
 }
 exports.default = AutoLinkerPlugin;
@@ -349,6 +360,15 @@ class AutoLinkerSettingTab extends obsidian_1.PluginSettingTab {
                 this.clearLinksToRemove();
             })).open();
         }));
+        new obsidian_1.Setting(containerEl)
+            .setName('Undo Last Changes')
+            .setDesc('Undo the last set of changes made by the Auto Linker')
+            .addButton(button => button
+            .setButtonText('Undo Last Changes')
+            .onClick(() => __awaiter(this, void 0, void 0, function* () {
+            yield this.plugin.undoLastChanges();
+            this.display(); // Refresh the settings view
+        })));
         this.updateManageLinksButtons();
     }
     updateManageLinksButtons() {
