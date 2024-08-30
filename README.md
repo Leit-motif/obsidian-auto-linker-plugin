@@ -1,5 +1,5 @@
 
-# AutoLinker Plugin for Obsidian
+# Linkify Plugin for Obsidian
 
 AutoLinker is an Obsidian plugin designed to automatically link specified words in your Markdown files to existing notes in your vault. This plugin is customizable, allowing you to define which words to link, exclude specific blocks or strings, and manage links across directories.
 
