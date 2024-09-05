@@ -1,4 +1,3 @@
-
 # Auto-linker
 
 Auto-linker is an Obsidian plugin designed to automatically link specified words in your Markdown files to existing notes in your vault. This plugin is customizable, allowing you to define which words to link, exclude specific blocks or strings, and manage links across directories.
@@ -57,6 +56,8 @@ If you need to revert the last set of changes made by Auto Linker:
 2. Click "Undo Last Changes" to restore the previous state of the modified files.
 
 ## Settings
+
+![image](https://github.com/user-attachments/assets/7a0075fe-4e91-42e0-95cd-b4a1eee3ec33)
 
 ### Link Existing Files Only
 
